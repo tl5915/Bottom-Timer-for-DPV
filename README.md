@@ -1,5 +1,5 @@
 # Bottom-Timer-for-DPV
-Seeed Xiao SAMD21 and MS5837 based dive bottom timer for large headup display of depth while scootering.
+ESP32-C3 Super Mini and MS5837 based dive bottom timer for large headup display of depth while scootering.
 https://scubaboard.com/community/threads/diy-bottom-timer-dive-computer.651599/
 
 Material:
@@ -7,7 +7,7 @@ Material:
 - M10 tap
 - PTFE tape
 - Tactile button
-- Seeed Xiao SAMD21
+- ESP32-C3 Super Mini
 - LiPo Charge Managment Board e.g. TP4056
 - 3.7V 1100 mAh LiPo battery
 - ROV M10 High Precision Depth Transducer MS5837-30BA (https://www.aliexpress.com/item/1005008729751929.html)
@@ -21,17 +21,17 @@ Battery
 - TP4056 B+ -> switch -> battery+
 - TP4056 B- -> battery-
 Top
-- Pin 4 -> I2C bus SDA
-- Pin 5 -> I2C bus SCL
+- Pin 6 -> I2C bus SDA
+- Pin 7 -> I2C bus SCL
 - 3V3 -> I2C bus VCC
 - GND -> I2C bus GND
 - GND -> TP4056 OUT-
 - 5V -> TP4056 OUT+
 
 Bottom
-- VIN -> 4.7k ohm resistor - Pin 9 -> 4.7 ohm resistor -> Pin 7  // switchable voltage divider for battery monitoring, 
-- Pin 4 -> 4.7 ohm resistor - 3V3  // I2C pull up
-- Pin 5 -> 4.7 ohm resistor - 3V3  // I2C pull up
+- VIN -> 10k ohm resistor - Pin 0 -> 10k ohm resistor -> GND  // Voltage divider for battery monitoring, 
+- Pin 6 -> 4.7 ohm resistor - 3V3  // I2C pull up
+- Pin 7 -> 4.7 ohm resistor - 3V3  // I2C pull up
 
 Assembly:
 1. Remove side button (power button) on housing, tap M10 thread
