@@ -1,19 +1,19 @@
 #include <Arduino.h>
-#include <sam.h>
+#include <esp_sleep.h>
+#include <esp_wifi.h>
+#include <esp_bt.h>
 #include <Wire.h>
+#include <MS5837.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <MS5837.h>
-#include <ArduinoLowPower.h>
-#include <SimpleKalmanFilter.h>
 
-SimpleKalmanFilter batteryKalman(0.1, 100, 0.001);  // R: measurement error, P: estimated error, Q: process noise
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 MS5837 sensor;
 
 // Pins
-const uint8_t enablePin = 7;
-const uint8_t batteryPin = 9;
+const uint8_t SCLPin = 7;
+const uint8_t SDAPin = 6;
+const uint8_t batteryPin = 0;
 
 // Battery Percentage Lookup Table
 const float voltages[] = {3.27, 3.61, 3.69, 3.71, 3.73, 3.75, 3.77, 3.79, 3.80, 3.82, 3.84, 3.85, 3.87, 3.91, 3.95, 3.98, 4.02, 4.08, 4.11, 4.15, 4.20};
@@ -24,37 +24,34 @@ const uint8_t TABLE_SIZE = 21;
 float depth = 0.0;
 float batteryVoltage = 0.0;
 unsigned long timerStartTime = 0;
-bool timerStarted = false;
+bool diveTimerStarted = false;
 int minutes = 0, seconds = 0;
+
 
 // Timer
 void updateTimer(float depth) {
-  if (depth >= 1.0 && !timerStarted) {  // Timer starts at 1 meter
+  if (depth >= 1.0 && !diveTimerStarted) {  // Timer starts at 1 meter
     timerStartTime = millis();
-    timerStarted = true;
+    diveTimerStarted = true;
   }
-  if (timerStarted) {
-    unsigned long elapsedTime = millis() - timerStartTime;
-    minutes = elapsedTime / 60000;
-    seconds = (elapsedTime % 60000) / 1000;
+  if (diveTimerStarted) {
+    unsigned long elapsed = millis() - timerStartTime;
+    minutes = elapsed / 60000;
+    seconds = (elapsed % 60000) / 1000;
   }
 }
 
 // Battery Voltage
 float readBattery() {
-  digitalWrite(enablePin, LOW);
-  pinMode(enablePin, OUTPUT);
-  analogRead(batteryPin);  // Discard first reading
-  const int samples = 32;
+  const int samples = 16;
   uint32_t sum = 0;
   for (int i = 0; i < samples; i++) {
-    sum += analogRead(batteryPin);
+    sum += analogReadMilliVolts(batteryPin);
   }
-  pinMode(enablePin, INPUT);
-  uint32_t averageReading = sum / samples;
-  float voltage = averageReading * (3.3 / 4095.0) * 2;  // 1:1 voltage divider
-  return batteryKalman.updateEstimate(voltage);
+  float voltage = (sum / samples) / 1000.0 * 2.0;  // 1:1 voltage divider
+  return voltage;
 }
+
 
 // Battery Percentage
 uint8_t batteryPercentage(float batteryVoltage) {
@@ -113,19 +110,29 @@ void updateDisplay(float depth, int minutes, int seconds, float batteryVoltage) 
   display.display();
 }
 
+
 void setup() {
-  Wire.begin();
-  Wire.setClock(100000);  // I2C clock speed 100 kHz
-  analogReadResolution(12);  // Internal ADC resolution 12-bit
-  batteryKalman.updateEstimate(3.7);  // Kalman filter starting point 3.7V
-  batteryKalman.setEstimateError(0.1);  // Reset P
+  // Power Conservation
+  esp_wifi_stop();                            // WiFi off
+  esp_bt_controller_disable();                // Bluetooth off
+  setCpuFrequencyMhz(10);                     // Reduce CPU frequency
 
+  // ADC
+  analogReadResolution(12);                   // Internal ADC resolution 12-bit
+  analogSetAttenuation(ADC_11db);             // 2.5V range
+
+  // I2C Initialisation
+  Wire.begin(SDAPin, SCLPin);                 // I2C start
+  Wire.setClock(400000);                      // I2C clock speed 400kHz
+
+  // MS5837 Initialisation
   sensor.init();
-  sensor.setModel(MS5837::MS5837_30BA);  // 30 bar model
-  sensor.setFluidDensity(1020);  // EN13319 density
+  sensor.setModel(MS5837::MS5837_30BA);       // 30 bar model
+  sensor.setFluidDensity(1020);               // EN13319 density
 
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display.setTextColor(SSD1306_WHITE);
+  // Display Initialisation
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // OLED start
+  display.setTextColor(SSD1306_WHITE);        // Set text colour
   display.clearDisplay();
   display.setTextSize(2);
   display.setCursor(28, 12);
@@ -133,15 +140,14 @@ void setup() {
   display.setCursor(34, 36);
   display.print(F("Timer"));
   display.display();
-  delay(500);
+  esp_sleep_enable_timer_wakeup(500000); 
+  esp_light_sleep_start();
 }
 
 void loop() {
-  unsigned long start = millis();
-
   sensor.read();
-  depth = sensor.depth();
-  if (depth < 0) depth = 0;  // Minimum depth 0 meter
+  depth = sensor.depth() - 0.2;    // Sea level off set
+  if (depth < 0) depth = 0;        // Minimum depth 0 meter
   if (depth > 99.9) depth = 99.9;  // Maximum depth 99.9 meters
 
   updateTimer(depth);
@@ -150,8 +156,19 @@ void loop() {
 
   updateDisplay(depth, minutes, seconds, batteryVoltage);
 
-  unsigned long elapsed = millis() - start;
-  if (elapsed < 500) {
-    LowPower.sleep(500 - elapsed);  // Sleep 500ms
+  if (batteryVoltage < 3.3) {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setCursor(22, 12);
+    display.print(F("Battery"));
+    display.setCursor(46, 36);
+    display.print(F("Low"));
+    display.display();
+    esp_sleep_enable_timer_wakeup(1000000); 
+    esp_light_sleep_start();
+    esp_deep_sleep_start();
   }
+
+  esp_sleep_enable_timer_wakeup(1000000);  // 1000ms interval
+  esp_light_sleep_start();
 }
