@@ -32,7 +32,7 @@ MS5837 Pin Layout: VCC (red) - SCL (green) - SDA (white) - GND (black)
 - Pin 6 -> 4.7 ohm resistor - 3V3 (I2C pull up)
 - Pin 7 -> 4.7 ohm resistor - 3V3 (I2C pull up)
 
-### Assembly
+## Assembly
 1. Remove side button (power button) on housing, tap M10 thread
 2. Mount MS5837 sensor on the M1O thread, seal with PTFE tape
 3. Tape battery inside housing
