@@ -20,7 +20,7 @@ MS5837 Pin Layout: VCC (red) - SCL (green) - SDA (white) - GND (black)
 ### Battery
 - TP4056 B+ -> switch -> battery+
 - TP4056 B- -> battery-
-#### Top
+### Top
 - Pin 6 -> I2C bus SDA
 - Pin 7 -> I2C bus SCL
 - 3V3 -> I2C bus VCC
